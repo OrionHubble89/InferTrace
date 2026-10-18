@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import httpx
 from opentelemetry.propagate import inject
 
-from infertrace.tracing import inference_request
+from infertrace.tracing import current_identifiers, inference_request
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,11 @@ class ChunkObservation:
     index: int
     elapsed_ns: int
     text: str
+    trace_id: str = ""
+    span_id: str = ""
+    session_id: str = ""
+    turn_id: str = ""
+    request_id: str = ""
 
 
 def observe_completion(
@@ -30,6 +35,7 @@ def observe_completion(
     prompt: str,
     max_tokens: int = 32,
     timeout: float = 120.0,
+    transport: httpx.BaseTransport | None = None,
 ) -> Iterator[ChunkObservation]:
     """Yield received chunks; close/consume iterator to finish the span."""
     url = base_url.rstrip("/") + "/v1/completions"
@@ -38,7 +44,7 @@ def observe_completion(
         inject(headers)
         started = time.perf_counter_ns()
         count = 0
-        with httpx.Client(timeout=timeout) as client:
+        with httpx.Client(timeout=timeout, transport=transport) as client:
             with client.stream(
                 "POST",
                 url,
@@ -64,5 +70,6 @@ def observe_completion(
                         index=count,
                         elapsed_ns=time.perf_counter_ns() - started,
                         text=content,
+                        **current_identifiers(),
                     )
         span.set_attribute("infertrace.stream.chunk_count", count)

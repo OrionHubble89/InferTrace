@@ -1,15 +1,30 @@
-"""OTel tracing bootstrap with optional OTLP exporter."""
+"""Explicit OTel lifecycle and correlation contexts; no import-time side effects."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass, replace
+from uuid import uuid4
 
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
+from opentelemetry.trace import Status, StatusCode
+
+
+@dataclass(frozen=True)
+class Correlation:
+    session_id: str = ""
+    turn_id: str = ""
+    request_id: str = ""
+
+
+_correlation: ContextVar[Correlation | None] = ContextVar("infertrace.correlation", default=None)
+_provider: trace.TracerProvider | None = None
 
 
 def configure_tracing(
@@ -17,10 +32,12 @@ def configure_tracing(
     *,
     otlp_endpoint: str | None = None,
     console: bool = False,
+    install_global: bool = True,
 ) -> TracerProvider:
-    """Configure a process-global provider once, before other OTel setup.
+    """Return an owned provider. Caller must shutdown it on application exit.
 
-    OTLP export is opt-in. Export occurs in a background batch processor.
+    Never silently replace an application's global provider. For embedded use,
+    pass install_global=False; InferTrace uses the returned provider internally.
     """
     provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
     if otlp_endpoint:
@@ -33,26 +50,68 @@ def configure_tracing(
         )
     if console:
         provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))
-    trace.set_tracer_provider(provider)
+    use_provider(provider)
+    if install_global:
+        trace.set_tracer_provider(provider)
     return provider
 
 
+def use_provider(provider: trace.TracerProvider | None) -> None:
+    """Use an application-owned provider, or None to use the global provider."""
+    global _provider
+    _provider = provider
+
+
+def current_correlation() -> Correlation:
+    return _correlation.get() or Correlation()
+
+
+def current_identifiers() -> dict[str, str]:
+    context = trace.get_current_span().get_span_context()
+    c = current_correlation()
+    return {
+        "trace_id": format(context.trace_id, "032x"),
+        "span_id": format(context.span_id, "016x"),
+        "session_id": c.session_id,
+        "turn_id": c.turn_id,
+        "request_id": c.request_id,
+    }
+
+
 @contextmanager
-def inference_turn(session_id: str, turn_id: str) -> Iterator[trace.Span]:
-    """Create a user-turn span; request spans become its descendants."""
-    tracer = trace.get_tracer("infertrace")
-    with tracer.start_as_current_span(
-        "infertrace.user.turn",
-        attributes={"infertrace.session_id": session_id, "infertrace.turn_id": turn_id},
-    ) as span:
+def _span(name: str, correlation: Correlation, **attributes: str) -> Iterator[trace.Span]:
+    token = _correlation.set(correlation)
+    tracer = trace.get_tracer("infertrace", tracer_provider=_provider)
+    attrs = {f"infertrace.{k}": v for k, v in vars(correlation).items() if v}
+    attrs.update(attributes)
+    try:
+        with tracer.start_as_current_span(name, attributes=attrs) as span:
+            try:
+                yield span
+            except GeneratorExit:
+                span.set_attribute("infertrace.cancelled", True)
+                raise
+            except BaseException as exc:
+                span.set_status(Status(StatusCode.ERROR, type(exc).__name__))
+                raise
+    finally:
+        _correlation.reset(token)
+
+
+@contextmanager
+def inference_session(session_id: str | None = None) -> Iterator[trace.Span]:
+    with _span("infertrace.user.session", Correlation(session_id or uuid4().hex)) as span:
         yield span
 
 
 @contextmanager
-def inference_request(model: str) -> Iterator[trace.Span]:
-    tracer = trace.get_tracer("infertrace")
-    with tracer.start_as_current_span(
-        "infertrace.request",
-        attributes={"gen_ai.request.model": model},
-    ) as span:
+def inference_turn(session_id: str, turn_id: str) -> Iterator[trace.Span]:
+    with _span("infertrace.user.turn", Correlation(session_id, turn_id)) as span:
+        yield span
+
+
+@contextmanager
+def inference_request(model: str, request_id: str | None = None) -> Iterator[trace.Span]:
+    c = replace(current_correlation(), request_id=request_id or uuid4().hex)
+    with _span("infertrace.request", c, **{"gen_ai.request.model": model}) as span:
         yield span
