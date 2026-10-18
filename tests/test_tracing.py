@@ -1,15 +1,12 @@
-from opentelemetry import trace
-from opentelemetry.sdk.trace.export import InMemorySpanExporter, SimpleSpanProcessor
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 from opentelemetry.sdk.trace import TracerProvider
 
-from infertrace.tracing import inference_request, inference_turn
 
-
-def test_request_is_child_of_turn():
+def test_trace_parent_child_relationship():
     exporter = InMemorySpanExporter()
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
-    # Avoid changing global provider: pass an explicit tracer through a local provider
     tracer = provider.get_tracer("test")
     with tracer.start_as_current_span("user") as parent:
         with tracer.start_as_current_span("request") as child:
