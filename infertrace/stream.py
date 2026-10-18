@@ -1,6 +1,6 @@
-"""Observe OpenAI-compatible SSE streaming without modifying the engine.
+"""Observe OpenAI-compatible SSE streaming without engine modifications.
 
-Each observation represents a received HTTP streaming *chunk*, not an engine token.
+Observations are client-received chunks, not necessarily model tokens.
 """
 from __future__ import annotations
 
@@ -10,7 +10,6 @@ import time
 from typing import Iterator
 
 import httpx
-from opentelemetry import trace
 from opentelemetry.propagate import inject
 
 from infertrace.tracing import inference_request
@@ -31,16 +30,13 @@ def observe_completion(
     max_tokens: int = 32,
     timeout: float = 120.0,
 ) -> Iterator[ChunkObservation]:
-    """Yield client-observed chunks from /v1/completions.
-
-    The request span is scoped to stream consumption. Caller must fully consume
-    or close the generator to end the span.
-    """
+    """Yield received chunks; close/consume iterator to finish the span."""
     url = base_url.rstrip("/") + "/v1/completions"
     with inference_request(model) as span:
         headers = {"Accept": "text/event-stream"}
         inject(headers)
         started = time.perf_counter_ns()
+        count = 0
         with httpx.Client(timeout=timeout) as client:
             with client.stream(
                 "POST",
@@ -59,12 +55,13 @@ def observe_completion(
                     choices = event.get("choices") or []
                     if not choices:
                         continue
-                    text = choices[0].get("text") or ""
-                    if not text:
+                    content = choices[0].get("text") or ""
+                    if not content:
                         continue
-                    observation = ChunkObservation(
-                        index=span.attributes.get("infertrace.chunk_count", 0) if False else 0,
+                    count += 1
+                    yield ChunkObservation(
+                        index=count,
                         elapsed_ns=time.perf_counter_ns() - started,
-                        text=text,
+                        text=content,
                     )
-                    yield observation
+        span.set_attribute("infertrace.stream.chunk_count", count)
