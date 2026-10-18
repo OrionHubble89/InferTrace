@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>InferTrace · Three Waterfalls</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#15283d;background:#f4f7fb}
+*{box-sizing:border-box}body{margin:0}header{padding:28px 36px;background:#142b44;color:white}
+h1{margin:0;font-size:27px}header p{color:#bdd1e7;margin-bottom:0}
+main{padding:24px 36px;max-width:1500px;margin:auto}label{font-size:14px;font-weight:600;display:inline-flex;gap:8px;align-items:center}
+.controls{display:flex;gap:16px;flex-wrap:wrap;align-items:center}input,select,button{font:inherit;padding:8px;border:1px solid #9baec1;border-radius:6px;background:white}
+button{cursor:pointer;color:#143c64}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #1575ca;outline-offset:3px}
+section,aside{background:white;border:1px solid #d7e1eb;border-radius:12px;padding:20px;margin-top:20px}
+h2{font-size:18px;margin-top:0}.muted{color:#50647a;font-size:14px}.warn{color:#824516;background:#fff3df;padding:10px;border-radius:6px}
+.lane{margin:14px 0;padding:8px 0;border-top:1px solid #e0e8ef}.lane-title{font-size:12px;overflow-wrap:anywhere;color:#50647a}
+.scroll{overflow:auto;padding-bottom:8px}.track{height:38px;position:relative;margin:6px 0;background:repeating-linear-gradient(90deg,#f0f4f9 0,#f0f4f9 1px,transparent 1px,transparent 10%)}
+.mark{position:absolute;top:4px;height:30px;min-width:8px;background:#c9e2fb;border:1px solid #3971ac;border-radius:4px;white-space:nowrap;text-align:left;padding:4px 7px;font-size:12px;overflow:hidden}
+.mark.engine{background:#d1ecde;border-color:#357855}.empty{color:#50647a;padding:12px}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:400px;overflow:auto}
+.layout{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:20px}aside{align-self:start;position:sticky;top:12px}
+@media(max-width:900px){.layout{display:block}main,header{padding:20px}aside{position:static}}
+</style></head><body>
+<header><h1>InferTrace</h1><p>One Trace. Three Waterfalls.</p></header>
+<main>
+<div class="controls">
+<label>Session <input id="session" placeholder="All sessions"></label>
+<label>Request <input id="request" placeholder="All requests"></label>
+<label>Source <select id="source"><option value="">All sources</option><option>client</option><option>engine</option><option>metrics</option></select></label>
+<label>Zoom <input id="zoom" type="range" min="1" max="8" value="1" aria-label="Timeline zoom"></label>
+<button id="refresh">Refresh</button></div>
+<p id="status" role="status" aria-live="polite">Loading observations…</p>
+<div class="layout"><div>
+<section aria-labelledby="user-title"><h2 id="user-title">User waterfall</h2><p class="muted">Session → turn → model / tool requests. Independent clocks use separate axes.</p><div id="user"></div></section>
+<section aria-labelledby="request-title"><h2 id="request-title">Request waterfall</h2><p class="muted">Observed intervals only. Queue, prefill and decode are unknown without engine events.</p><div id="requests"></div></section>
+<section aria-labelledby="token-title"><h2 id="token-title">Token waterfall</h2><p class="warn">Client chunks are HTTP observations, not model tokens.</p><div id="tokens"></div></section>
+<section><h2>Evidence limits</h2><div id="warnings"></div></section>
+</div><aside aria-labelledby="detail-title"><h2 id="detail-title">Observation details</h2><p class="muted">Select a bar or observation. Keyboard: Tab, Enter.</p><pre id="detail">No observation selected.</pre></aside></div>
+</main><script src="/app.js" defer></script></body></html>

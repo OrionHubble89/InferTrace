@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from pydantic import ValidationError
 
+from infertrace.correlation import reconstruct
 from infertrace.events import Event
 from infertrace.storage import EventStore
 
@@ -31,10 +33,23 @@ def create_server(
 
         def do_GET(self) -> None:
             parsed = urlparse(self.path)
+            if parsed.path in ("/", "/app.js"):
+                filename = "index.html" if parsed.path == "/" else "app.js"
+                payload = (Path(__file__).parent / "static" / filename).read_bytes()
+                self.send_response(200)
+                self.send_header(
+                    "Content-Type",
+                    "text/html" if filename.endswith("html") else "application/javascript",
+                )
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.end_headers()
+                self.wfile.write(payload)
+                return
             if parsed.path == "/health":
                 self.respond(200, {"status": "ok"})
                 return
-            if parsed.path != "/events":
+            if parsed.path not in ("/events", "/timeline"):
                 self.respond(404, {"error": "not found"})
                 return
             q = parse_qs(parsed.query)
@@ -52,7 +67,12 @@ def create_server(
             except ValueError:
                 self.respond(400, {"error": "invalid pagination"})
                 return
-            self.respond(200, [e.model_dump(mode="json") for e in events])
+            self.respond(
+                200,
+                reconstruct(events)
+                if parsed.path == "/timeline"
+                else [e.model_dump(mode="json") for e in events],
+            )
 
         def do_POST(self) -> None:
             if self.path != "/events":

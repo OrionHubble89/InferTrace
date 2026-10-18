@@ -39,3 +39,6 @@ select = ["E", "F", "I", "UP", "B"]
 python_version = "3.10"
 strict = true
 files = ["infertrace"]
+
+[tool.setuptools.package-data]
+infertrace = ["static/*.html", "static/*.js"]
