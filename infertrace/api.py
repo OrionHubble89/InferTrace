@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from infertrace.correlation import reconstruct
 from infertrace.events import Event
+from infertrace.otlp import parse_otlp_json
 from infertrace.storage import EventStore
 
 
@@ -67,15 +68,19 @@ def create_server(
             except ValueError:
                 self.respond(400, {"error": "invalid pagination"})
                 return
-            self.respond(
-                200,
-                reconstruct(events)
-                if parsed.path == "/timeline"
-                else [e.model_dump(mode="json") for e in events],
-            )
+            try:
+                result = (
+                    reconstruct(events)
+                    if parsed.path == "/timeline"
+                    else [e.model_dump(mode="json") for e in events]
+                )
+            except ValueError:
+                self.respond(422, {"error": "conflicting or cyclic timeline"})
+                return
+            self.respond(200, result)
 
         def do_POST(self) -> None:
-            if self.path != "/events":
+            if self.path not in ("/events", "/v1/traces"):
                 self.respond(404, {"error": "not found"})
                 return
             try:
@@ -85,14 +90,22 @@ def create_server(
                     return
                 self.connection.settimeout(5)
                 data = json.loads(self.rfile.read(length))
-                if not isinstance(data, list) or len(data) > 1000:
-                    raise ValueError("expected bounded list")
-                events = [Event.from_json(json.dumps(e)) for e in data]
+                if self.path == "/v1/traces":
+                    if not isinstance(data, dict):
+                        raise ValueError("expected OTLP object")
+                    events = parse_otlp_json(data)
+                else:
+                    if not isinstance(data, list) or len(data) > 1000:
+                        raise ValueError("expected bounded list")
+                    events = [Event.from_json(json.dumps(e)) for e in data]
                 store.export(events)
-            except (ValueError, ValidationError, TimeoutError):
+            except (ValueError, ValidationError, TimeoutError, KeyError, TypeError, AttributeError):
                 self.respond(400, {"error": "invalid event batch"})
                 return
-            self.respond(202, {"accepted": len(events)})
+            self.respond(
+                200 if self.path == "/v1/traces" else 202,
+                {} if self.path == "/v1/traces" else {"accepted": len(events)},
+            )
 
     return ThreadingHTTPServer((host, port), Handler)
 

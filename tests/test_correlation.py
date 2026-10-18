@@ -91,3 +91,34 @@ def test_uncorrelated_batch_metrics_never_become_request_phases():
 def test_invalid_clock_anchor():
     with pytest.raises(ValueError):
         replace(ClockAnchor("c", 0, 0), uncertainty_ns=-1)
+
+
+def test_long_causal_chain_has_no_recursion_limit():
+    events = [e(str(i), i, parent_event_id=str(i - 1) if i else None) for i in range(5000)]
+    result = reconstruct(events)
+    assert result["critical_path"]["duration_ns"] == 4999
+    assert len(result["critical_path"]["event_ids"]) == 5000
+
+
+def test_parent_span_joins_engine_without_timing_guess():
+    request = e("client", 0, EventType.REQUEST_START)
+    engine = e(
+        "engine",
+        10,
+        EventType.REQUEST_START,
+        source="engine",
+        span_id="c" * 16,
+        parent_span_id="b" * 16,
+        request_id="",
+        session_id="",
+        turn_id="",
+        missing=("request-attribution",),
+        clock_domain="engine",
+    )
+    result = reconstruct([request, engine])
+    joined = next(row for row in result["events"] if row["event_id"] == "engine")
+    assert joined["request_id"] == "r"
+    assert joined["session_id"] == "s"
+    assert joined["missing"] == []
+    assert joined["provenance"].endswith("/parent-span-join")
+    assert joined["domain"] == "engine"

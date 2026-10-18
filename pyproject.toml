@@ -1,14 +1,14 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "infertrace"
-version = "0.1.0"
+version = "0.1.0rc1"
 description = "Low-overhead AI inference observability"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "Apache-2.0"}
+license = "Apache-2.0"
 dependencies = [
   "opentelemetry-api>=1.25,<2",
   "opentelemetry-sdk>=1.25,<2",
@@ -41,4 +41,4 @@ strict = true
 files = ["infertrace"]
 
 [tool.setuptools.package-data]
-infertrace = ["static/*.html", "static/*.js"]
+infertrace = ["static/*.html", "static/*.js", "py.typed"]

@@ -25,6 +25,17 @@ class EventStore:
 
     def export(self, events: Sequence[Event]) -> None:
         with self._lock, self._db:
+            seen: dict[str, str] = {}
+            for event in events:
+                body = event.to_json()
+                if event.event_id in seen and seen[event.event_id] != body:
+                    raise ValueError("conflicting duplicate event ID")
+                seen[event.event_id] = body
+                existing = self._db.execute(
+                    "SELECT body FROM events WHERE event_id=?", (event.event_id,)
+                ).fetchone()
+                if existing and existing[0] != body:
+                    raise ValueError("conflicting duplicate event ID")
             self._db.executemany(
                 "INSERT OR IGNORE INTO events VALUES (?, ?, ?, ?, ?, ?)",
                 [

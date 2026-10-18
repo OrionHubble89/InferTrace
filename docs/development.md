@@ -28,3 +28,9 @@ Embedded applications should call `use_provider(application_provider)` or
 `configure_tracing(install_global=False)`. They own provider shutdown. Context
 uses ContextVar and is restored on completion, cancellation and exceptions.
 Do not reconfigure providers while requests are in flight.
+
+The final CI additionally runs browser, Docker Compose and dependency-audit jobs,
+and reinstalls the built wheel outside checkout. For the local runtime audit,
+use a fresh production virtualenv, freeze its installed dependencies excluding
+InferTrace, then run pip-audit==2.10.1 with --no-deps --disable-pip. npm audit checks
+the browser-test toolchain. No GPU job is part of this workflow.

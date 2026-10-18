@@ -100,6 +100,11 @@ class Collector:
                 self._dropped += 1
                 return False
 
+    def record_drop(self) -> None:
+        """Account for invalid telemetry without failing inference."""
+        with self._lock:
+            self._dropped += 1
+
     def _run(self) -> None:
         while not self._stop.is_set() or not self._queue.empty():
             batch = []

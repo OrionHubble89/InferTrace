@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING
 from uuid import uuid4
 
+if TYPE_CHECKING:
+    from infertrace.collector import Collector
+
+from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
@@ -25,6 +31,7 @@ class Correlation:
 
 _correlation: ContextVar[Correlation | None] = ContextVar("infertrace.correlation", default=None)
 _provider: trace.TracerProvider | None = None
+CLOCK_DOMAIN = f"monotonic:{os.getpid()}:{uuid4().hex}"
 
 
 def configure_tracing(
@@ -115,3 +122,49 @@ def inference_request(model: str, request_id: str | None = None) -> Iterator[tra
     c = replace(current_correlation(), request_id=request_id or uuid4().hex)
     with _span("infertrace.request", c, **{"gen_ai.request.model": model}) as span:
         yield span
+
+
+@contextmanager
+def consumer_context(context: otel_context.Context, correlation: Correlation) -> Iterator[None]:
+    """Suspend instrumentation context while a streaming caller consumes a chunk."""
+    token = otel_context.attach(context)
+    correlation_token = _correlation.set(correlation)
+    try:
+        yield
+    finally:
+        _correlation.reset(correlation_token)
+        otel_context.detach(token)
+
+
+@contextmanager
+def inference_tool(name: str, collector: Collector | None = None) -> Iterator[trace.Span]:
+    """Observe a caller-selected tool operation without recording inputs/outputs."""
+    from infertrace.events import EventType, client_event
+
+    c = replace(current_correlation(), request_id=uuid4().hex)
+    clock = CLOCK_DOMAIN
+
+    def emit(kind: EventType, outcome: str | None = None) -> None:
+        if collector is not None and collector.enabled:
+            try:
+                collector.emit(
+                    client_event(
+                        kind,
+                        clock_domain=clock,
+                        phase="tool",
+                        request_kind="tool",
+                        operation_name=name,
+                        outcome=outcome,
+                    )
+                )
+            except (ValueError, TypeError):
+                collector.record_drop()
+
+    with _span("infertrace.tool", c, **{"infertrace.tool.name": name}) as span:
+        outcome = "error"
+        emit(EventType.PHASE_START)
+        try:
+            yield span
+            outcome = "ok"
+        finally:
+            emit(EventType.PHASE_END, outcome)

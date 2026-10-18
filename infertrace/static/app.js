@@ -15,7 +15,8 @@ function scope(row) {
 }
 function label(row) {
   return (row.session_id || "unknown session") + " / " + (row.turn_id || "unknown turn") +
-    " / " + (row.request_id || "aggregate");
+    " / " + (row.request_id || "aggregate") + (row.model ? " · " + row.model : "") +
+    (row.operation_name ? " · tool: " + row.operation_name : "");
 }
 function renderLanes(target, rows, userView = false) {
   const parent = $(target); parent.replaceChildren();

@@ -36,9 +36,13 @@ class Event(BaseModel):
     event_type: EventType
     trace_id: str = Field(pattern=r"^[0-9a-f]{32}$")
     span_id: str = Field(pattern=r"^[0-9a-f]{16}$")
+    parent_span_id: str | None = Field(default=None, pattern=r"^[0-9a-f]{16}$")
     session_id: str = Field(max_length=128)
     turn_id: str = Field(max_length=128)
     request_id: str = Field(max_length=128)
+    model: str | None = Field(default=None, max_length=256)
+    request_kind: Literal["model", "tool"] | None = None
+    operation_name: str | None = Field(default=None, max_length=128)
     source: Literal["client", "engine", "metrics", "collector"]
     clock_domain: str = Field(min_length=1, max_length=128)
     timestamp_ns: int = Field(ge=0, le=2**63 - 1)

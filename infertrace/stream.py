@@ -3,22 +3,27 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 from collections.abc import Iterator
 from contextlib import nullcontext
 from dataclasses import dataclass
-from uuid import uuid4
 
 import httpx
+from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.propagate import inject
 
 from infertrace.collector import Collector
 from infertrace.events import EventType, client_event
-from infertrace.tracing import current_identifiers, inference_request
+from infertrace.tracing import (
+    CLOCK_DOMAIN,
+    consumer_context,
+    current_correlation,
+    current_identifiers,
+    inference_request,
+)
 
-_CLOCK = f"monotonic:{os.getpid()}:{uuid4().hex}"
+_CLOCK = CLOCK_DOMAIN
 
 
 @dataclass(frozen=True)
@@ -76,8 +81,17 @@ def observe_completion(
 
     def emit(event_type: EventType, **fields: object) -> None:
         if enabled and collector is not None and collector.enabled:
-            collector.emit(client_event(event_type, clock_domain=_CLOCK, **fields))
+            try:
+                collector.emit(
+                    client_event(
+                        event_type, clock_domain=_CLOCK, model=model, request_kind="model", **fields
+                    )
+                )
+            except (ValueError, TypeError):
+                collector.record_drop()
 
+    parent_context = otel_context.get_current()
+    parent_correlation = current_correlation()
     with inference_request(model) if enabled else nullcontext(trace.INVALID_SPAN) as span:
         headers = {"Accept": "text/event-stream"}
         if api_key:
@@ -125,12 +139,14 @@ def observe_completion(
                         emit(
                             EventType.CLIENT_CHUNK, sequence=count, missing=("engine-token-timing",)
                         )
-                        yield ChunkObservation(
+                        observation = ChunkObservation(
                             index=count,
                             elapsed_ns=time.perf_counter_ns() - started,
                             text=content,
                             **(current_identifiers() if enabled else {}),
                         )
+                        with consumer_context(parent_context, parent_correlation):
+                            yield observation
                     if not done:
                         raise StreamProtocolError("stream ended before [DONE]")
             outcome = "ok"

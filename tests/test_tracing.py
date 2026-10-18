@@ -88,3 +88,76 @@ def test_close_records_cancellation_and_restores_context(tracing):
     span = exporter.get_finished_spans()[0]
     assert span.attributes["infertrace.cancelled"] is True
     assert current_correlation().request_id == ""
+
+
+def test_interleaved_streams_are_siblings_and_restore_consumer_context(tracing):
+    _, exporter = tracing
+
+    def stream():
+        return observe_completion(
+            base_url="http://mock",
+            model="m",
+            prompt="x",
+            transport=httpx.MockTransport(
+                lambda _: httpx.Response(
+                    200, text='data: {"choices":[{"text":"x"}]}\n\ndata: [DONE]\n\n'
+                )
+            ),
+        )
+
+    with inference_session("s"), inference_turn("s", "t") as turn:
+        a, b = stream(), stream()
+        ca, cb = next(a), next(b)
+        assert ca.request_id != cb.request_id
+        assert current_correlation().request_id == ""
+        assert trace.get_current_span() == turn
+        a.close()
+        b.close()
+    requests = [s for s in exporter.get_finished_spans() if s.name == "infertrace.request"]
+    assert len(requests) == 2
+    assert all(s.parent.span_id == turn.get_span_context().span_id for s in requests)
+
+
+def test_invalid_telemetry_does_not_fail_completion(tracing):
+    from infertrace.collector import Collector
+
+    c = Collector(lambda _: None)
+    try:
+        with inference_turn("s" * 129, "t"):
+            chunks = list(
+                observe_completion(
+                    base_url="http://mock",
+                    model="m",
+                    prompt="x",
+                    collector=c,
+                    transport=httpx.MockTransport(
+                        lambda _: httpx.Response(
+                            200, text='data: {"choices":[{"text":"ok"}]}\n\ndata: [DONE]\n\n'
+                        )
+                    ),
+                )
+            )
+        assert chunks[0].text == "ok"
+        assert c.stats().dropped == 3
+    finally:
+        assert c.close()
+
+
+def test_tool_phase_events(tracing):
+    from infertrace.collector import Collector
+    from infertrace.correlation import reconstruct
+    from infertrace.tracing import inference_tool
+
+    events = []
+    c = Collector(lambda batch: events.extend(batch))
+    try:
+        with inference_session("s"), inference_turn("s", "t"):
+            with inference_tool("search", c):
+                pass
+        assert c.flush()
+        result = reconstruct(events)
+        assert result["intervals"][0]["phase"] == "tool"
+        assert events[-1].outcome == "ok"
+        assert events[0].operation_name == "search"
+    finally:
+        assert c.close()

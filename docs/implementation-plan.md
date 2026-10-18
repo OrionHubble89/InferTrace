@@ -83,17 +83,19 @@ Implement M0–M8 with local/unit/mock/integration tests and CI. **Defer real GP
 
 | Milestone | Status |
 |---|---|
-| M0 | Partial bootstrap committed; not verified |
-| M1 | Partial bootstrap committed; not verified |
-| M2 | Not started |
-| M3 | Not started |
-| M4 | Not started |
-| M5 | Not started |
-| M6 | Not started |
-| M7 | Not started |
-| M8 | Not started |
+| M0 | Implemented and CI verified; see implementation-report.md |
+| M1 | Implemented and CI verified; see implementation-report.md |
+| M2 | Implemented and CI verified |
+| M3 | Implemented and CI verified; OTLP JSON strengthened in M8 |
+| M4 | Implemented and CI verified |
+| M5 | Implemented; Chromium UI and CI verified |
+| M6 | Implemented; CPU/failure/memory tests and CI verified |
+| M7 | Implemented; Compose/Jaeger and full CI verified at 9df9d45 |
+| M8 | Local release checks passed; final source CI pending |
 | M9 | Deferred until M0–M8 complete |
 
 ## Definition of done
 
 A milestone is complete only when code, tests, docs and CI evidence are present. GitHub commits alone are not evidence of successful execution. A release is not production-validated until M9 finishes.
+
+Execution evidence and remaining limitations: [implementation-report.md](implementation-report.md).

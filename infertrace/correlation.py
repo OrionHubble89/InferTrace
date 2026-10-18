@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import defaultdict, deque
 from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 
@@ -31,6 +31,37 @@ def reconstruct(events: Sequence[Event], anchors: Sequence[ClockAnchor] = ()) ->
         if event.event_id in unique and unique[event.event_id] != event:
             raise ValueError("conflicting duplicate event ID")
         unique[event.event_id] = event
+    # Resolve explicit parent-span ancestry; never join by time proximity.
+    by_parent: dict[tuple[str, str], list[Event]] = defaultdict(list)
+    known: dict[tuple[str, str], set[tuple[str, str, str]]] = defaultdict(set)
+    for event in unique.values():
+        if event.trace_id == "0" * 32:
+            continue
+        if event.request_id:
+            known[(event.trace_id, event.span_id)].add(
+                (event.session_id, event.turn_id, event.request_id)
+            )
+        elif event.parent_span_id:
+            by_parent[(event.trace_id, event.parent_span_id)].append(event)
+    scopes = {key: next(iter(values)) for key, values in known.items() if len(values) == 1}
+    todo = deque(scopes)
+    while todo:
+        scope_key = todo.popleft()
+        for child in by_parent.get(scope_key, []):
+            session, turn, request = scopes[scope_key]
+            unique[child.event_id] = child.model_copy(
+                update={
+                    "session_id": child.session_id or session,
+                    "turn_id": child.turn_id or turn,
+                    "request_id": request,
+                    "missing": tuple(m for m in child.missing if m != "request-attribution"),
+                    "provenance": child.provenance + "/parent-span-join",
+                }
+            )
+            child_key = child.trace_id, child.span_id
+            if child_key not in scopes:
+                scopes[child_key] = session, turn, request
+                todo.append(child_key)
     ordered = sorted(unique.values(), key=lambda e: (e.clock_domain, e.timestamp_ns, e.event_id))
     rows: list[dict[str, object]] = []
     warnings: set[str] = set()
@@ -98,6 +129,9 @@ def reconstruct(events: Sequence[Event], anchors: Sequence[ClockAnchor] = ()) ->
                     "request_id": e.request_id,
                     "phase": e.phase or kind.value.split(".")[0],
                     "source": e.source,
+                    "model": begin.model,
+                    "request_kind": begin.request_kind,
+                    "operation_name": begin.operation_name,
                     "domain": domain,
                     "start_ns": start,
                     "end_ns": end,
@@ -112,38 +146,52 @@ def reconstruct(events: Sequence[Event], anchors: Sequence[ClockAnchor] = ()) ->
             warnings.add(f"missing-end:{e.event_id}")
 
     # Longest path uses only explicit causal parent edges, not timeline adjacency.
-    visiting: set[str] = set()
-    scores: dict[str, tuple[int, list[str]]] = {}
-
-    def path(e: Event) -> tuple[int, list[str]]:
-        if e.event_id in scores:
-            return scores[e.event_id]
-        if e.event_id in visiting:
-            raise ValueError("causal cycle")
-        visiting.add(e.event_id)
-        best = (0, [e.event_id])
-        if e.parent_event_id:
-            parent = unique.get(e.parent_event_id)
-            if not parent:
-                warnings.add(f"missing-parent:{e.event_id}")
-            elif (parent.trace_id, parent.session_id) != (e.trace_id, e.session_id):
-                warnings.add(f"cross-trace-parent:{e.event_id}")
-            else:
-                score, chain = path(parent)
-                pd, pt, pu = position(parent)
-                cd, ct, cu = position(e)
-                if pd != cd:
-                    warnings.add(f"unaligned-causal-edge:{e.event_id}")
-                elif ct - pt < pu + cu:
-                    warnings.add(f"uncertain-causal-edge:{e.event_id}")
-                else:
-                    best = (score + ct - pt, chain + [e.event_id])
-        visiting.remove(e.event_id)
-        scores[e.event_id] = best
-        return best
-
+    children: dict[str, list[Event]] = defaultdict(list)
+    indegree = dict.fromkeys(unique, 0)
     for e in ordered:
-        path(e)
+        if not e.parent_event_id:
+            continue
+        parent = unique.get(e.parent_event_id)
+        if parent is None:
+            warnings.add(f"missing-parent:{e.event_id}")
+        elif (parent.trace_id, parent.session_id) != (e.trace_id, e.session_id):
+            warnings.add(f"cross-trace-parent:{e.event_id}")
+        else:
+            children[parent.event_id].append(e)
+            indegree[e.event_id] += 1
+    ready = deque(sorted(key for key, degree in indegree.items() if degree == 0))
+    # Store predecessor pointers, not every prefix: linear memory on long traces.
+    duration: dict[str, int] = dict.fromkeys(unique, 0)
+    predecessor: dict[str, str] = {}
+    visited = 0
+    while ready:
+        id = ready.popleft()
+        parent = unique[id]
+        visited += 1
+        for e in children[id]:
+            pd, pt, pu = position(parent)
+            cd, ct, cu = position(e)
+            if pd != cd:
+                warnings.add(f"unaligned-causal-edge:{e.event_id}")
+            elif ct - pt < pu + cu:
+                warnings.add(f"uncertain-causal-edge:{e.event_id}")
+            else:
+                duration[e.event_id] = duration[id] + ct - pt
+                predecessor[e.event_id] = id
+            indegree[e.event_id] -= 1
+            if indegree[e.event_id] == 0:
+                ready.append(e.event_id)
+    if visited != len(unique):
+        raise ValueError("causal cycle")
+    scores: dict[str, tuple[int, list[str]]] = {}
+    if duration:
+        best = max(sorted(duration), key=lambda key: duration[key])
+        chain = [best]
+        cursor = best
+        while cursor in predecessor:
+            cursor = predecessor[cursor]
+            chain.append(cursor)
+        scores[best] = duration[best], list(reversed(chain))
     score, chain = max(scores.values(), key=lambda x: x[0], default=(0, []))
     return {
         "events": rows,

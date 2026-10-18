@@ -24,6 +24,24 @@ The optional vLLM adapter scrapes public `/metrics` Prometheus exposition;
 resource observations, not request spans or engine tokens. Labels are omitted
 and marked missing. Deeper engine-token/phase events require a separate source
 that supplies explicit request correlation and an Event with engine provenance.
-This MVP does not claim a built-in vLLM token hook or a native OTLP receiver;
+This MVP does not claim a built-in vLLM token hook or OTLP gRPC/protobuf receiver;
 OTel spans can independently be exported to Jaeger using its public OTLP input.
 Real vLLM interface compatibility is reserved for M9.
+
+
+## OTLP JSON span bridge
+POST /v1/traces accepts OTLP/HTTP JSON resourceSpans/scopeSpans with hex traceId,
+spanId, optional parentSpanId and string start/endTimeUnixNano. It stores span
+boundaries, drops arbitrary attributes, and does not infer phases or tokens.
+Only infertrace.session_id/turn_id/request_id/clock_domain string attributes are
+retained. Missing request correlation is explicit; the correlation engine can
+join via known parent-span ancestry. Unknown clocks remain separate.
+This is a JSON adapter, not a complete OTLP collector implementation: no
+protobuf/gRPC/gzip support, no native token instrumentation, no claimed vLLM
+version compatibility before M9. Use a supported JSON bridge/explicit conversion.
+POST responses use HTTP 200 with {} for accepted OTLP JSON.
+
+GET /timeline accepts the same filters/pagination as /events and returns
+reconstructed intervals, observations, evidence warnings and causal-path data.
+Cyclic causal data produces HTTP 422 rather than an unhandled server failure.
+Conflicting duplicate event IDs reject an entire batch; exact retries are safe.

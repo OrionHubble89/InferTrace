@@ -2,35 +2,53 @@
 
 **One Trace. Three Waterfalls. Zero Overhead. Plug & Play.**
 
-InferTrace is an open-source observability project for AI inference. Its goal is to correlate user experience, request execution and token-level timing while keeping instrumentation optional and lightweight.
+An inference observability MVP with OTel propagation, bounded background
+collection, SQLite persistence and an interactive User / Request / Token UI.
+HTTP client chunks are explicitly distinguished from engine tokens. Zero
+Overhead is a measured engineering target, not a literal or validated claim.
 
-## Design principles
-
-1. **One Trace:** propagate W3C trace context and correlate session, turn and inference request identifiers.
-2. **Three Waterfalls:** User, Request and Token timelines, with explicit measurement provenance. Streaming chunks are **not** equivalent to model tokens.
-3. **Zero Overhead:** an aspirational target; no instrumentation is literally free. Default-off detailed instrumentation, nonblocking exports and reproducible A/B benchmarks.
-4. **Plug & Play:** integrate with OpenAI-compatible inference servers without patching engine source.
-
-## Quick start
-
-Python 3.10+ required.
-
-```bash
-python -m pip install -e '.[dev]'
-python -m infertrace.demo
-pytest -q
+## Run the CPU-only demonstration
+Requires Docker Compose; no GPU or inference model is downloaded.
+```sh
+git clone https://github.com/OrionHubble89/InferTrace.git
+cd InferTrace
+docker compose --profile mock up --build -d infertrace otel-collector jaeger mock
+docker compose --profile mock run --rm demo
 ```
+Open [Three Waterfalls](http://127.0.0.1:8080) and
+[Jaeger](http://127.0.0.1:16686). The demonstration produces synthetic client chunks,
+not real engine tokens. Use `docker compose down` to stop and retain event data.
 
-The demo prints a local trace to stdout without needing a running inference engine.
+## Python integration
+Python 3.10+:
+```sh
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -c constraints.txt -e '.[dev]'
+python -m infertrace.api
+```
+Configure endpoint/model in examples/config.json, then from another terminal:
+```sh
+python -m infertrace capabilities --config examples/config.json
+python examples/plug_and_play.py --config examples/config.json
+```
+Baseline completions/chat SSE needs no engine patch. Deeper engine events require
+an explicit source; aggregate vLLM metrics do not provide per-request GPU timing.
+Wrap application calls with inference_session / inference_turn; inference_tool
+records named tool intervals without inputs/outputs.
 
-## Scope
+## Engineering status
+M0–M8 target a locally and CI-validated release candidate, not production
+validation. The authoritative plan and evidence are tracked in:
+- [Implementation plan](docs/implementation-plan.md)
+- [Execution report and commits](docs/implementation-report.md)
+- [Architecture](docs/architecture.md)
+- [Development and checks](docs/development.md)
+- [Configuration and compatibility](docs/plug-and-play.md)
+- [Event schema](docs/event-schema.md) · [Collector/API](docs/collector.md)
+- [Correlation](docs/correlation.md) · [UI](docs/ui.md)
+- [Overhead scope](docs/overhead.md) · [Security/privacy](docs/security.md)
+- [Troubleshooting](docs/troubleshooting.md) · [Release checklist](docs/release-checklist.md)
 
-- **M0:** package, design principles, tests, CI.
-- **M1:** OpenTelemetry trace context, user/turn/request spans, optional OTLP export, OpenAI-compatible streaming client adapter.
-- **Next:** collector, correlation API, waterfall UI, vLLM internal token instrumentation, performance benchmarking.
-
-See [architecture](docs/architecture.md) and [design principles](docs/design-principles.md).
-
-## Accuracy contract
-
-Client streaming observations measure *chunk arrival times*, not exact GPU execution or per-token decode latency. No measured overhead claim is made without controlled benchmarks.
+M9 alone validates RTX 4090 + real vLLM, engine event compatibility and controlled
+baseline/instrumented overhead. No real GPU validation has been performed here.

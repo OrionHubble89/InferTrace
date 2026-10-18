@@ -16,3 +16,7 @@ known causal edges; chronological adjacency does not imply causation.
 
 The envelope has no prompt, completion text, API key or arbitrary attributes.
 Only bounded identifiers, metric names and numeric observations are stored.
+
+Parent span IDs support ancestry joins without time proximity. Optional bounded
+model, request_kind and operation_name fields distinguish model/tool operations.
+These names are caller-selected metadata; do not place content or secrets in them.
