@@ -6,10 +6,12 @@ import json
 import os
 import time
 from collections.abc import Iterator
+from contextlib import nullcontext
 from dataclasses import dataclass
 from uuid import uuid4
 
 import httpx
+from opentelemetry import trace
 from opentelemetry.propagate import inject
 
 from infertrace.collector import Collector
@@ -64,6 +66,7 @@ def observe_completion(
     collector: Collector | None = None,
     api_key: str | None = None,
     chat: bool = False,
+    enabled: bool = True,
 ) -> Iterator[ChunkObservation]:
     """Close partially consumed iterators. Export contains no prompt/chunk text."""
     url = base_url.rstrip("/")
@@ -72,15 +75,16 @@ def observe_completion(
     url += "/chat/completions" if chat else "/completions"
 
     def emit(event_type: EventType, **fields: object) -> None:
-        if collector is not None:
+        if enabled and collector is not None and collector.enabled:
             collector.emit(client_event(event_type, clock_domain=_CLOCK, **fields))
 
-    with inference_request(model) as span:
+    with inference_request(model) if enabled else nullcontext(trace.INVALID_SPAN) as span:
         headers = {"Accept": "text/event-stream"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"
-        inject(headers)
-        headers["X-Request-ID"] = current_identifiers()["request_id"]
+        if enabled:
+            inject(headers)
+            headers["X-Request-ID"] = current_identifiers()["request_id"]
         started = time.perf_counter_ns()
         count = 0
         outcome = "incomplete"
@@ -125,7 +129,7 @@ def observe_completion(
                             index=count,
                             elapsed_ns=time.perf_counter_ns() - started,
                             text=content,
-                            **current_identifiers(),
+                            **(current_identifiers() if enabled else {}),
                         )
                     if not done:
                         raise StreamProtocolError("stream ended before [DONE]")

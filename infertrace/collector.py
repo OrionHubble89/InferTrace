@@ -6,6 +6,7 @@ import hashlib
 import queue
 import threading
 import time
+from collections import OrderedDict
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 
@@ -32,9 +33,20 @@ class Collector:
         sample_rate: float = 1.0,
         enabled: bool = True,
         interval: float = 0.05,
+        adaptive: bool = False,
+        decision_capacity: int = 4096,
     ):
-        if capacity < 1 or batch_size < 1 or not 0 <= sample_rate <= 1 or interval <= 0:
+        if (
+            capacity < 1
+            or batch_size < 1
+            or not 0 <= sample_rate <= 1
+            or interval <= 0
+            or decision_capacity < 1
+        ):
             raise ValueError("invalid collector limits")
+        self._adaptive = adaptive
+        self._decision_capacity = decision_capacity
+        self._decisions: OrderedDict[str, bool] = OrderedDict()
         self._queue: queue.Queue[Event] = queue.Queue(capacity)
         self._export = export
         self._batch_size = batch_size
@@ -49,6 +61,10 @@ class Collector:
             self._thread = threading.Thread(target=self._run, daemon=True, name="infertrace-export")
             self._thread.start()
 
+    @property
+    def enabled(self) -> bool:
+        return self._enabled and not self._stop.is_set()
+
     def emit(self, event: Event) -> bool:
         if not self._enabled:
             return False
@@ -59,7 +75,21 @@ class Collector:
             if self._stop.is_set():
                 self._dropped += 1
                 return False
-            if ratio >= self._sample_rate:
+            if key in self._decisions:
+                sampled = self._decisions[key]
+                self._decisions.move_to_end(key)
+            else:
+                pressure = self._queue.qsize() / self._queue.maxsize
+                rate = (
+                    self._sample_rate * max(0.05, 1 - pressure)
+                    if self._adaptive
+                    else self._sample_rate
+                )
+                sampled = ratio < rate
+                self._decisions[key] = sampled
+                if len(self._decisions) > self._decision_capacity:
+                    self._decisions.popitem(last=False)
+            if not sampled:
                 self._sampled += 1
                 return False
             try:

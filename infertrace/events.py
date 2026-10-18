@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 from enum import Enum
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -41,10 +41,10 @@ class Event(BaseModel):
     request_id: str = Field(max_length=128)
     source: Literal["client", "engine", "metrics", "collector"]
     clock_domain: str = Field(min_length=1, max_length=128)
-    timestamp_ns: int = Field(ge=0)
-    observed_unix_ns: int = Field(ge=0)
+    timestamp_ns: int = Field(ge=0, le=2**63 - 1)
+    observed_unix_ns: int = Field(ge=0, le=2**63 - 1)
     provenance: str = Field(min_length=1, max_length=256)
-    missing: tuple[str, ...] = ()
+    missing: tuple[Annotated[str, Field(max_length=128)], ...] = Field(default=(), max_length=32)
     parent_event_id: str | None = Field(default=None, max_length=128)
     phase: Literal["queue", "prefill", "decode", "streaming", "tool"] | None = None
     sequence: int | None = Field(default=None, ge=0)

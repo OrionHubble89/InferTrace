@@ -1,0 +1,47 @@
+{
+  "platform": "Linux-6.18.55-x86_64-with-glibc2.39",
+  "python": "3.12.14",
+  "scope": "preallocated event emit only; no GPU/inference measurement",
+  "results": {
+    "disabled_emit": {
+      "median_ns_per_call": 61.7101,
+      "samples_ns": [
+        61.2154,
+        59.2594,
+        61.7101,
+        76.813,
+        86.4534,
+        66.5464,
+        58.985
+      ],
+      "stats": {
+        "accepted": 0,
+        "dropped": 0,
+        "sampled_out": 0,
+        "exported": 0,
+        "export_errors": 0,
+        "pending": 0
+      }
+    },
+    "enabled_emit": {
+      "median_ns_per_call": 2375.1454,
+      "samples_ns": [
+        2250.4803,
+        2349.0079,
+        2297.5613,
+        2886.9998,
+        2382.3933,
+        2721.9428,
+        2375.1454
+      ],
+      "stats": {
+        "accepted": 26592,
+        "dropped": 43408,
+        "sampled_out": 0,
+        "exported": 26592,
+        "export_errors": 0,
+        "pending": 0
+      }
+    }
+  }
+}
