@@ -1,0 +1,10 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "model": "Qwen/Qwen2.5-0.5B-Instruct",
+  "collector_url": "http://127.0.0.1:8080/events",
+  "enabled": true,
+  "capacity": 1024,
+  "batch_size": 64,
+  "sample_rate": 1.0,
+  "adaptive": false
+}

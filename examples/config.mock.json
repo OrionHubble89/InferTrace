@@ -1,0 +1,5 @@
+{
+  "base_url": "http://mock:8000",
+  "model": "mock-model",
+  "collector_url": "http://infertrace:8080/events"
+}

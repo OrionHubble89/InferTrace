@@ -34,3 +34,19 @@ jobs:
       - run: python -m pip install -c constraints.txt -e .
       - run: npm ci --ignore-scripts
       - run: npm run test:ui
+  compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -c constraints.txt -e .
+      - run: docker compose --profile mock config --quiet
+      - run: docker compose --profile mock up --build -d infertrace otel-collector jaeger mock
+      - run: docker compose --profile mock run --rm demo
+      - run: python scripts/compose_smoke.py
+      - if: always()
+        run: docker compose --profile mock logs
+      - if: always()
+        run: docker compose --profile mock down -v

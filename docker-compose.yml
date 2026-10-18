@@ -1,9 +1,40 @@
 services:
+  infertrace:
+    build: .
+    ports: ["127.0.0.1:8080:8080"]
+    volumes: ["events:/data"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+  otel-collector:
+    image: otel/opentelemetry-collector:0.111.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes: ["./examples/otel-collector.yaml:/etc/otelcol/config.yaml:ro"]
+    ports: ["127.0.0.1:4317:4317"]
+    depends_on: [jaeger]
   jaeger:
     image: jaegertracing/all-in-one:1.62.0
-    ports:
-      - "16686:16686"
-      - "4317:4317"
-      - "4318:4318"
+    ports: ["127.0.0.1:16686:16686"]
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
+  mock:
+    profiles: [mock]
+    build: .
+    command: ["python", "scripts/mock_openai.py"]
+  demo:
+    profiles: [mock]
+    build: .
+    command: ["python", "examples/plug_and_play.py", "--config", "examples/config.mock.json"]
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+    depends_on:
+      otel-collector:
+        condition: service_started
+      infertrace:
+        condition: service_healthy
+      mock:
+        condition: service_started
+volumes:
+  events:
