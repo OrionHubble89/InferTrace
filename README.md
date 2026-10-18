@@ -15,9 +15,25 @@ cd InferTrace
 docker compose --profile mock up --build -d infertrace otel-collector jaeger mock
 docker compose --profile mock run --rm demo
 ```
-Open [Three Waterfalls](http://127.0.0.1:8080) and
-[Jaeger](http://127.0.0.1:16686). The demonstration produces synthetic client chunks,
-not real engine tokens. Use `docker compose down` to stop and retain event data.
+After the containers start, open these addresses in a browser on the same machine:
+
+| Service | Local address |
+|---|---|
+| Three Waterfalls UI | `http://localhost:8080` |
+| Jaeger trace viewer | `http://localhost:16686` |
+
+These are local services, not publicly hosted demos. On GitHub, see the
+[waterfall UI documentation](docs/ui.md) for usage and interaction details.
+
+If Docker runs on a remote host, forward its loopback ports first (replace
+`user@host` with your SSH destination):
+```sh
+ssh -N -L 8080:127.0.0.1:8080 -L 16686:127.0.0.1:16686 user@host
+```
+Then open the local addresses above on your computer.
+
+The demonstration produces synthetic client chunks, not real engine tokens.
+Use `docker compose down` to stop and retain event data.
 
 ## Python integration
 Python 3.10+:
