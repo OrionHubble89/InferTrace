@@ -6,6 +6,9 @@ M0–M8 acceptance requires the final source revision to pass:
 - Docker Compose: non-root app, mock endpoint, persisted events, OTel Collector, Jaeger trace continuity.
 - Runtime Python dependency audit; npm high/critical advisory audit.
 - Architecture/API/config/privacy/troubleshooting docs; commit/evidence ledger.
+- Review regressions: caller context, OTLP retries, lifecycle collection,
+  pre-filter ancestry, equal timestamps, >10000-event pagination, disabled setup,
+  non-finite metrics and streaming input limits.
 - No critical unresolved blocker; known limits remain explicit.
 
 M9 is a separate final gate, not included in these checks:

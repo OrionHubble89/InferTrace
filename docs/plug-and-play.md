@@ -39,3 +39,10 @@ you intend to delete demo data. In CI -v cleans only the isolated job's data.
 
 The current execution host has no Docker daemon. Compose runtime validation runs
 in GitHub Actions; its result, not YAML generation, determines installation status.
+
+Session/turn event collection is enabled by passing collector=collector to
+inference_session and inference_turn; the example does this automatically.
+Set enabled=false to skip provider setup, lifecycle spans, request instrumentation
+and collection. No OTLP exporter is configured in that mode.
+Existing event databases migrate their query indexes automatically without
+discarding original records. No inference-engine source modification is needed.

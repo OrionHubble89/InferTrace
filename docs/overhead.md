@@ -25,3 +25,10 @@ bounded memory with thousands of distinct events, disabled fast path and bounded
 shutdown. A timed-out close returns false: the daemon worker remains alive until
 its exporter returns; Python cannot forcibly terminate it.
 M9 alone measures baseline-versus-instrumented GPU inference overhead.
+
+The configuration-based integration's enabled=false skips OTel provider creation
+and all session/turn/request instrumentation. For manual integration, use
+inference_session(..., enabled=False), inference_turn(..., enabled=False) and
+inference_tool(..., enabled=False) alongside observe_completion(enabled=False).
+The disabled stream path does not copy execution context. The configured metrics
+response limit is enforced during streaming reads, not after full buffering.

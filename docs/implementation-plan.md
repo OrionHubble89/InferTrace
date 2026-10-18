@@ -1,6 +1,6 @@
 # InferTrace Implementation Plan
 
-Status: **M0–M8 release candidate implemented and CI verified; M9 deferred**. This document defines the implementation order; completion is based on evidence, not the presence of a file.
+Status: **rc2 review fixes locally verified; full CI pending; M9 deferred**. This document defines the implementation order; completion is based on evidence, not the presence of a file.
 
 ## Design principles
 
@@ -99,3 +99,5 @@ Implement M0–M8 with local/unit/mock/integration tests and CI. **Defer real GP
 A milestone is complete only when code, tests, docs and CI evidence are present. GitHub commits alone are not evidence of successful execution. A release is not production-validated until M9 finishes.
 
 Execution evidence and remaining limitations: [implementation-report.md](implementation-report.md).
+
+Current review acceptance: [review-followups.md](review-followups.md).

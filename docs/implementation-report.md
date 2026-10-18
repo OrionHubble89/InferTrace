@@ -1,9 +1,12 @@
 # InferTrace 实现报告
 
-执行依据：docs/implementation-plan.md。目标版本：0.1.0rc1。
+执行依据：docs/implementation-plan.md。当前目标版本：0.1.0rc2。
+当前评审修复的验收状态见 [review-followups.md](review-followups.md)。
+九项评审问题已实现并通过本地回归，当前提交的完整 CI 尚待确认。
+以下 M0–M8 提交表是 rc1 的历史基线，不作为 rc2 最终验收结论。
 本报告将本地验证、GitHub CI 和 M9 实机验证分开记录。
 M0–M8 已完成 release candidate 范围内的实现和验证。
-最终源代码提交：6a256b27ffbea0dd8d5af3414b4a3f773041363e。
+rc1 源代码提交：6a256b27ffbea0dd8d5af3414b4a3f773041363e。
 [完整 CI 运行 #39108236394](https://github.com/OrionHubble89/InferTrace/actions/runs/39108236394)
 全部成功：Python 3.10、Python 3.12、Chromium UI、Compose、dependencies。
 M9 未执行，因此不宣称真实引擎兼容性、Zero Overhead 或生产就绪。
@@ -62,7 +65,7 @@ OTel spans 独立经 OTel Collector 进入 Jaeger。
    当前内置 OTLP JSON 接入提供 span 边界，不提供自动 vLLM token hook。
 3. vLLM metrics 是聚合数据；标签暂省略并标注缺失，不能推断 GPU 归属。
 4. 跨机器时钟需外部校准，未实现时钟漂移估计。
-5. UI 单次最多 10000 事件；无大规模虚拟滚动，JS 纳秒数值存在精度限制。
+5. UI 默认最新 1000 事件一页，可在完整数据库上筛选和翻页；页边界会显式标注部分数据。JS 纳秒数值存在精度限制。
 6. 采样/溢出/出口故障可能产生部分 trace；LRU 驱逐后采样决策可能重算。
 7. 自定义阻塞出口不能被 Python 强制终止；close 超时会返回 false。
 8. HTTP 服务仅限可信本机环境，无内置认证/多租户/自动保留策略；详见 security.md。

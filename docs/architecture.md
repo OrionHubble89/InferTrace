@@ -31,12 +31,15 @@ flowchart TD
 ## One Trace
 Session, turn, model request and tool operation use OTel spans. Streaming HTTP
 propagates W3C headers and X-Request-ID. Events persist trace/span/session/turn/
-request identifiers. Consumer context is restored between generator yields;
-interleaved requests remain siblings. Caller must close partially consumed
+request identifiers. Each streaming iterator executes in a dedicated copied context bound at first
+consumption. No generator-owned context token is attached to the caller's context;
+new consumer spans, interleaved streams and cross-thread close retain isolation. Caller must close partially consumed
 iterators. Provider configuration is application startup work, not request work.
 
 ## Three Waterfalls
-User lanes group sessions, turns and model/tool requests. Request lanes contain
+Session and turn helpers accept collector= and emit lifecycle events, including
+empty turns and failure outcomes. User lanes show those intervals alongside
+model/tool requests. Request lanes contain
 only observed intervals. Token lanes show engine events only when supplied;
 baseline HTTP data is labeled Client chunk. A public OTLP JSON adapter preserves
 span boundaries and parent IDs; it cannot turn span duration into decode phases
@@ -54,10 +57,27 @@ The inference path performs no network/disk telemetry export. Queue, batch and
 sampling-decision memory are bounded. Schema bounds limit individual events;
 HTTP export splits at ingestion byte/count limits. Failed/overflowed observations
 are dropped and counted. Shutdown is time bounded; blocked custom exporters may
-outlive close as daemon threads. Disabled mode skips spans/headers/events.
+outlive close as daemon threads. Disabled application configuration skips provider setup, session/turn spans,
+request spans, headers, context copies and event allocation. Individual lifecycle
+helpers also accept enabled=False. Metrics HTTP responses are decoded incrementally
+with a 4 MiB retained-body limit; non-finite samples become explicit missing values.
 
 ## Deployment boundary
 The MVP combines UI/API/event ingestion in one non-root container. SQLite uses a
 named volume. OTel spans flow separately to Jaeger. Compose publishes only
 loopback ports. This is a trusted local development service, not an authenticated
 multi-tenant collector. No production-readiness claim precedes M9.
+
+
+## Query snapshots and upgrades
+SQLite migration adds indexed span ancestry/source columns while retaining old
+event payloads. Recursive ancestry is resolved before request/session/source
+filters and page selection; ambiguous scopes and aggregate metrics are never
+assigned to a request. The latest view orders by ingestion row ID, independent of
+unrelated clock domains. Snapshot IDs restrict both selection and ancestry so
+new arrivals do not shift older pages. Page boundaries are explicitly partial.
+Queries may traverse stored ancestry and are intended for MVP-sized local logs;
+they do not execute on the inference producer thread.
+
+OTLP retries compare immutable upstream span data and retain the first receipt
+timestamp. A changed span with the same deterministic event ID remains a conflict.

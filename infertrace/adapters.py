@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import time
 from collections.abc import Sequence
 
@@ -49,6 +50,15 @@ def parse_vllm_metrics(payload: str, *, instance: str) -> list[Event]:
         for sample in family.samples:
             if not sample.name.startswith("vllm:"):
                 continue
+            value = float(sample.value)
+            finite = math.isfinite(value)
+            missing: tuple[str, ...] = (
+                "request-attribution",
+                "engine-token-timing",
+                "metric-labels",
+            )
+            if not finite:
+                missing += ("non-finite-value",)
             events.append(
                 Event(
                     event_type=EventType.RESOURCE,
@@ -62,9 +72,9 @@ def parse_vllm_metrics(payload: str, *, instance: str) -> list[Event]:
                     timestamp_ns=now,
                     observed_unix_ns=now,
                     provenance=f"vllm-prometheus:{instance}",
-                    missing=("request-attribution", "engine-token-timing", "metric-labels"),
+                    missing=missing,
                     metric_name=sample.name,
-                    value=float(sample.value),
+                    value=value if finite else None,
                 )
             )
     return events
@@ -77,9 +87,13 @@ def scrape_vllm_metrics(
     timeout: float = 2.0,
     transport: httpx.BaseTransport | None = None,
 ) -> list[Event]:
+    limit = 4_194_304
     with httpx.Client(timeout=timeout, transport=transport) as client:
-        response = client.get(base_url.rstrip("/") + "/metrics")
-        response.raise_for_status()
-        if len(response.content) > 4_194_304:
-            raise ValueError("metrics response exceeds limit")
-        return parse_vllm_metrics(response.text, instance=instance)
+        with client.stream("GET", base_url.rstrip("/") + "/metrics") as response:
+            response.raise_for_status()
+            body = bytearray()
+            for chunk in response.iter_bytes(chunk_size=65536):
+                if len(body) + len(chunk) > limit:
+                    raise ValueError("metrics response exceeds limit")
+                body.extend(chunk)
+            return parse_vllm_metrics(body.decode("utf-8"), instance=instance)

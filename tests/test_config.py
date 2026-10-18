@@ -63,7 +63,10 @@ def test_simulated_installation_end_to_end(tmp_path):
     collector = Collector(HTTPExporter(f"http://127.0.0.1:{server.server_port}/events"))
     provider = configure_tracing(install_global=False)
     try:
-        with inference_session("session"), inference_turn("session", "turn"):
+        with (
+            inference_session("session", collector=collector),
+            inference_turn("session", "turn", collector=collector),
+        ):
             chunks = list(
                 observe_completion(
                     base_url="http://mock",
@@ -80,10 +83,17 @@ def test_simulated_installation_end_to_end(tmp_path):
         assert collector.flush()
         with httpx.Client() as client:
             timeline = client.get(f"http://127.0.0.1:{server.server_port}/timeline").json()
-        assert len(timeline["events"]) == 3
-        assert len(timeline["intervals"]) == 1
+        assert len(timeline["events"]) == 7
+        assert len(timeline["intervals"]) == 3
         assert {e["trace_id"] for e in timeline["events"]} == {chunks[0].trace_id}
-        assert {e["request_id"] for e in timeline["events"]} == {chunks[0].request_id}
+        requests = [e for e in timeline["events"] if e["event_type"].startswith("request.")]
+        assert {e["request_id"] for e in requests} == {chunks[0].request_id}
+        assert {e["event_type"] for e in timeline["events"]} >= {
+            "session.start",
+            "session.end",
+            "turn.start",
+            "turn.end",
+        }
     finally:
         collector.close()
         server.shutdown()

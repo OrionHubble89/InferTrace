@@ -1,6 +1,8 @@
 "use strict";
 const $ = id => document.getElementById(id);
 let data = {events: [], intervals: [], warnings: []};
+let offset = 0, snapshot = null, loadVersion = 0, timer = null, controller = null;
+const pageSize = 1000;
 function el(tag, text, cls) {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
@@ -9,7 +11,8 @@ function el(tag, text, cls) {
 }
 function inspect(row) { $("detail").textContent = JSON.stringify(row, null, 2); }
 function scope(row) {
-  return (!$("session").value || row.session_id === $("session").value) &&
+  return (!$("trace").value || row.trace_id === $("trace").value) &&
+    (!$("session").value || row.session_id === $("session").value) &&
     (!$("request").value || row.request_id === $("request").value) &&
     (!$("source").value || row.source === $("source").value);
 }
@@ -36,7 +39,7 @@ function renderLanes(target, rows, userView = false) {
     const span = Math.max(end - origin, 1);
     const groups = new Map();
     for (const row of observations) {
-      const key = userView ? label(row) : (row.request_id || "aggregate") + " · " + (row.phase || row.event_type);
+      const key = row.trace_id + " · " + (userView ? label(row) : label(row) + " · " + (row.phase || row.event_type));
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(row);
     }
@@ -56,7 +59,10 @@ function renderLanes(target, rows, userView = false) {
         button.title = kind + ": " + duration + " ms · " + row.provenance;
         button.onclick = () => {
           inspect(row);
-          if (userView && row.request_id) { $("request").value = row.request_id; render(); }
+          if (userView && row.request_id) {
+            $("trace").value = row.trace_id; $("session").value = row.session_id;
+            $("request").value = row.request_id; resetPage(); load();
+          }
         };
         track.append(button);
       }
@@ -77,15 +83,40 @@ function render() {
   ].map(w => el("p", w, "muted")));
 }
 async function load() {
+  const version = ++loadVersion;
+  if (controller) controller.abort();
+  controller = new AbortController();
   $("status").textContent = "Loading observations…";
+  const query = new URLSearchParams({limit: String(pageSize), offset: String(offset), order: "latest"});
+  if (snapshot !== null) query.set("snapshot", String(snapshot));
+  for (const [id, field] of [["trace","trace_id"],["session","session_id"],["request","request_id"],["source","source"]]) {
+    if ($(id).value) query.set(field, $(id).value);
+  }
   try {
-    const response = await fetch("/timeline?limit=10000");
+    const response = await fetch("/timeline?" + query.toString(), {signal: controller.signal});
     if (!response.ok) throw new Error("HTTP " + response.status);
-    data = await response.json();
-    $("status").textContent = data.events.length + " observations loaded (up to 10000).";
+    const received = await response.json();
+    if (version !== loadVersion) return;
+    data = received;
+    const page = data.pagination;
+    snapshot = page.snapshot;
+    $("status").textContent = data.events.length + " observations loaded · " +
+      page.total + " matching · page " + (Math.floor(offset / pageSize) + 1) +
+      (page.has_more ? " · older observations available" : "");
+    $("newer").disabled = offset === 0;
+    $("older").disabled = !page.has_more;
     render();
-  } catch (error) { $("status").textContent = "Unable to load observations: " + error.message; }
+  } catch (error) {
+    if (version !== loadVersion || error.name === "AbortError") return;
+    $("status").textContent = "Unable to load observations: " + error.message;
+  }
 }
-for (const id of ["session","request","source","zoom"]) $(id).addEventListener("input", render);
-$("refresh").onclick = load;
+function resetPage() { offset = 0; snapshot = null; clearTimeout(timer); }
+for (const id of ["trace","session","request","source"]) $(id).addEventListener("input", () => {
+  resetPage(); timer = setTimeout(load, 200);
+});
+$("zoom").addEventListener("input", render);
+$("newer").onclick = () => { offset = Math.max(0, offset - pageSize); load(); };
+$("older").onclick = () => { offset += pageSize; load(); };
+$("refresh").onclick = $("latest").onclick = () => { resetPage(); load(); };
 load();

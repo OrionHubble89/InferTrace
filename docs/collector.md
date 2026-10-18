@@ -45,3 +45,21 @@ GET /timeline accepts the same filters/pagination as /events and returns
 reconstructed intervals, observations, evidence warnings and causal-path data.
 Cyclic causal data produces HTTP 422 rather than an unhandled server failure.
 Conflicting duplicate event IDs reject an entire batch; exact retries are safe.
+
+## Review follow-up query semantics
+GET /timeline now resolves parent-span scope before filtering and pagination.
+Optional source=client|engine|metrics|collector, order=oldest|latest and snapshot
+join the existing trace_id/session_id/request_id/limit/offset parameters.
+The response includes pagination: total, snapshot, offset, limit, has_more and
+next_offset. Latest means ingestion order, not timestamp comparison between hosts.
+Pass the returned snapshot on subsequent pages; omit it to refresh. Filters apply
+to the full snapshot. Partial pages carry a warning and can split intervals.
+
+GET /events retains its raw event-list response and supports the same query
+parameters, without inferred scope. EventStore.query_page(resolve=True) is the
+typed Python API for correlated queries. Exact OTLP JSON retries preserve the
+first receipt time; changed immutable span content rejects the batch.
+
+Metrics scrape reads stop as soon as the decoded 4 MiB limit is exceeded and
+close the response on success/error. NaN and infinity are retained as value=null
+with missing containing non-finite-value; valid samples in the scrape survive.

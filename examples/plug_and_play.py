@@ -2,7 +2,7 @@
 
 import argparse
 import os
-from contextlib import closing
+from contextlib import closing, nullcontext
 
 from infertrace.adapters import HTTPExporter
 from infertrace.collector import Collector
@@ -16,8 +16,12 @@ def main() -> None:
     parser.add_argument("--config")
     args = parser.parse_args()
     config = load_config(args.config)
-    provider = configure_tracing(
-        install_global=False, otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+    provider = (
+        configure_tracing(
+            install_global=False, otlp_endpoint=os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+        )
+        if config.enabled
+        else None
     )
     collector = Collector(
         HTTPExporter(config.collector_url),
@@ -28,7 +32,17 @@ def main() -> None:
         enabled=config.enabled,
     )
     try:
-        with inference_session("demo-session"), inference_turn("demo-session", "turn-1"):
+        session = (
+            inference_session("demo-session", collector=collector)
+            if config.enabled
+            else nullcontext()
+        )
+        turn = (
+            inference_turn("demo-session", "turn-1", collector=collector)
+            if config.enabled
+            else nullcontext()
+        )
+        with session, turn:
             with closing(
                 observe_completion(
                     base_url=config.base_url,
@@ -47,7 +61,8 @@ def main() -> None:
             raise RuntimeError("telemetry export failed")
     finally:
         collector.close()
-        provider.shutdown()
+        if provider is not None:
+            provider.shutdown()
 
 
 if __name__ == "__main__":

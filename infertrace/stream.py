@@ -9,16 +9,14 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 
 import httpx
-from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.propagate import inject
 
 from infertrace.collector import Collector
 from infertrace.events import EventType, client_event
+from infertrace.iteration import isolated_iterator
 from infertrace.tracing import (
     CLOCK_DOMAIN,
-    consumer_context,
-    current_correlation,
     current_identifiers,
     inference_request,
 )
@@ -60,6 +58,7 @@ def sse_payloads(lines: Iterator[str], max_event_chars: int = 1_048_576) -> Iter
         yield "\n".join(data)
 
 
+@isolated_iterator
 def observe_completion(
     *,
     base_url: str,
@@ -90,8 +89,6 @@ def observe_completion(
             except (ValueError, TypeError):
                 collector.record_drop()
 
-    parent_context = otel_context.get_current()
-    parent_correlation = current_correlation()
     with inference_request(model) if enabled else nullcontext(trace.INVALID_SPAN) as span:
         headers = {"Accept": "text/event-stream"}
         if api_key:
@@ -145,8 +142,7 @@ def observe_completion(
                             text=content,
                             **(current_identifiers() if enabled else {}),
                         )
-                        with consumer_context(parent_context, parent_correlation):
-                            yield observation
+                        yield observation
                     if not done:
                         raise StreamProtocolError("stream ended before [DONE]")
             outcome = "ok"

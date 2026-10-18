@@ -13,7 +13,6 @@ from uuid import uuid4
 if TYPE_CHECKING:
     from infertrace.collector import Collector
 
-from opentelemetry import context as otel_context
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
@@ -105,15 +104,80 @@ def _span(name: str, correlation: Correlation, **attributes: str) -> Iterator[tr
         _correlation.reset(token)
 
 
+def _emit_lifecycle(collector: Collector | None, kind: str, outcome: str | None = None) -> None:
+    if collector is None or not collector.enabled:
+        return
+    from infertrace.events import EventType, client_event
+
+    try:
+        collector.emit(
+            client_event(
+                EventType(kind),
+                clock_domain=CLOCK_DOMAIN,
+                outcome=outcome,
+                provenance="infertrace/application-lifecycle",
+            )
+        )
+    except (ValueError, TypeError):
+        collector.record_drop()
+
+
 @contextmanager
-def inference_session(session_id: str | None = None) -> Iterator[trace.Span]:
-    with _span("infertrace.user.session", Correlation(session_id or uuid4().hex)) as span:
+def _lifecycle(
+    name: str,
+    correlation: Correlation,
+    kind: str,
+    collector: Collector | None,
+    enabled: bool,
+) -> Iterator[trace.Span]:
+    if not enabled:
+        yield trace.INVALID_SPAN
+        return
+    with _span(name, correlation) as span:
+        _emit_lifecycle(collector, kind + ".start")
+        outcome = "error"
+        try:
+            yield span
+            outcome = "ok"
+        except GeneratorExit:
+            outcome = "cancelled"
+            raise
+        finally:
+            _emit_lifecycle(collector, kind + ".end", outcome)
+
+
+@contextmanager
+def inference_session(
+    session_id: str | None = None,
+    *,
+    collector: Collector | None = None,
+    enabled: bool = True,
+) -> Iterator[trace.Span]:
+    with _lifecycle(
+        "infertrace.user.session",
+        Correlation(session_id or uuid4().hex),
+        "session",
+        collector,
+        enabled,
+    ) as span:
         yield span
 
 
 @contextmanager
-def inference_turn(session_id: str, turn_id: str) -> Iterator[trace.Span]:
-    with _span("infertrace.user.turn", Correlation(session_id, turn_id)) as span:
+def inference_turn(
+    session_id: str,
+    turn_id: str,
+    *,
+    collector: Collector | None = None,
+    enabled: bool = True,
+) -> Iterator[trace.Span]:
+    with _lifecycle(
+        "infertrace.user.turn",
+        Correlation(session_id, turn_id),
+        "turn",
+        collector,
+        enabled,
+    ) as span:
         yield span
 
 
@@ -125,20 +189,13 @@ def inference_request(model: str, request_id: str | None = None) -> Iterator[tra
 
 
 @contextmanager
-def consumer_context(context: otel_context.Context, correlation: Correlation) -> Iterator[None]:
-    """Suspend instrumentation context while a streaming caller consumes a chunk."""
-    token = otel_context.attach(context)
-    correlation_token = _correlation.set(correlation)
-    try:
-        yield
-    finally:
-        _correlation.reset(correlation_token)
-        otel_context.detach(token)
-
-
-@contextmanager
-def inference_tool(name: str, collector: Collector | None = None) -> Iterator[trace.Span]:
+def inference_tool(
+    name: str, collector: Collector | None = None, *, enabled: bool = True
+) -> Iterator[trace.Span]:
     """Observe a caller-selected tool operation without recording inputs/outputs."""
+    if not enabled:
+        yield trace.INVALID_SPAN
+        return
     from infertrace.events import EventType, client_event
 
     c = replace(current_correlation(), request_id=uuid4().hex)
@@ -154,6 +211,7 @@ def inference_tool(name: str, collector: Collector | None = None) -> Iterator[tr
                         phase="tool",
                         request_kind="tool",
                         operation_name=name,
+                        provenance="infertrace/application-tool",
                         outcome=outcome,
                     )
                 )

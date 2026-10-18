@@ -21,11 +21,17 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;max-height:400px;
 <header><h1>InferTrace</h1><p>One Trace. Three Waterfalls.</p></header>
 <main>
 <div class="controls">
+<label>Trace <input id="trace" placeholder="All traces"></label>
 <label>Session <input id="session" placeholder="All sessions"></label>
 <label>Request <input id="request" placeholder="All requests"></label>
 <label>Source <select id="source"><option value="">All sources</option><option>client</option><option>engine</option><option>metrics</option></select></label>
 <label>Zoom <input id="zoom" type="range" min="1" max="8" value="1" aria-label="Timeline zoom"></label>
 <button id="refresh">Refresh</button></div>
+<nav aria-label="Observation pages" class="controls" style="margin-top:16px">
+<button id="newer" disabled>Newer page</button>
+<button id="older" disabled>Older page</button>
+<button id="latest">Latest observations</button>
+</nav>
 <p id="status" role="status" aria-live="polite">Loading observations…</p>
 <div class="layout"><div>
 <section aria-labelledby="user-title"><h2 id="user-title">User waterfall</h2><p class="muted">Session → turn → model / tool requests. Independent clocks use separate axes.</p><div id="user"></div></section>

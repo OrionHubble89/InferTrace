@@ -41,7 +41,7 @@ def reconstruct(events: Sequence[Event], anchors: Sequence[ClockAnchor] = ()) ->
             known[(event.trace_id, event.span_id)].add(
                 (event.session_id, event.turn_id, event.request_id)
             )
-        elif event.parent_span_id:
+        elif event.parent_span_id and event.source != "metrics":
             by_parent[(event.trace_id, event.parent_span_id)].append(event)
     scopes = {key: next(iter(values)) for key, values in known.items() if len(values) == 1}
     todo = deque(scopes)
@@ -62,7 +62,16 @@ def reconstruct(events: Sequence[Event], anchors: Sequence[ClockAnchor] = ()) ->
             if child_key not in scopes:
                 scopes[child_key] = session, turn, request
                 todo.append(child_key)
-    ordered = sorted(unique.values(), key=lambda e: (e.clock_domain, e.timestamp_ns, e.event_id))
+    end_types = {
+        EventType.REQUEST_END,
+        EventType.SESSION_END,
+        EventType.TURN_END,
+        EventType.PHASE_END,
+    }
+    ordered = sorted(
+        unique.values(),
+        key=lambda e: (e.clock_domain, e.timestamp_ns, e.event_type in end_types, e.event_id),
+    )
     rows: list[dict[str, object]] = []
     warnings: set[str] = set()
 
@@ -137,7 +146,7 @@ def reconstruct(events: Sequence[Event], anchors: Sequence[ClockAnchor] = ()) ->
                     "end_ns": end,
                     "uncertainty_ns": uncertainty,
                     "provenance": begin.provenance,
-                    "annotations": list(set(begin.missing + e.missing)),
+                    "annotations": sorted(set(begin.missing + e.missing)),
                     "outcome": e.outcome,
                 }
             )

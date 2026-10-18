@@ -8,7 +8,18 @@ with httpx.Client(timeout=5) as client:
     response = client.get("http://127.0.0.1:8080/timeline")
     response.raise_for_status()
     data = response.json()
-    assert len(data["events"]) >= 4
+    kinds = {e["event_type"] for e in data["events"]}
+    assert {
+        "session.start",
+        "session.end",
+        "turn.start",
+        "turn.end",
+        "request.start",
+        "request.end",
+        "client.chunk",
+    } <= kinds
+    assert {i["phase"] for i in data["intervals"]} >= {"session", "turn", "request"}
+    assert data["pagination"]["total"] >= 8
     request_ids = {e["request_id"] for e in data["events"]}
     assert len(request_ids) >= 1
     assert any(e["event_type"] == "client.chunk" for e in data["events"])

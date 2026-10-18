@@ -54,29 +54,54 @@ def create_server(
                 self.respond(404, {"error": "not found"})
                 return
             q = parse_qs(parsed.query)
-            if set(q) - {"trace_id", "session_id", "request_id", "limit", "offset"}:
+            if set(q) - {
+                "trace_id",
+                "session_id",
+                "request_id",
+                "source",
+                "limit",
+                "offset",
+                "order",
+                "snapshot",
+            }:
                 self.respond(400, {"error": "unknown query"})
                 return
             try:
-                events = store.query(
+                order = q.get("order", ["oldest"])[0]
+                if order not in ("oldest", "latest"):
+                    raise ValueError("invalid order")
+                page = store.query_page(
                     trace_id=q.get("trace_id", [None])[0],
                     session_id=q.get("session_id", [None])[0],
                     request_id=q.get("request_id", [None])[0],
                     limit=int(q.get("limit", ["1000"])[0]),
                     offset=int(q.get("offset", ["0"])[0]),
+                    source=q.get("source", [None])[0],
+                    latest=order == "latest",
+                    snapshot=int(q["snapshot"][0]) if "snapshot" in q else None,
+                    resolve=parsed.path == "/timeline",
                 )
+                events = page.events
             except ValueError:
                 self.respond(400, {"error": "invalid pagination"})
                 return
             try:
-                result = (
-                    reconstruct(events)
-                    if parsed.path == "/timeline"
-                    else [e.model_dump(mode="json") for e in events]
-                )
+                if parsed.path != "/timeline":
+                    self.respond(200, [e.model_dump(mode="json") for e in events])
+                    return
+                result = reconstruct(events)
             except ValueError:
                 self.respond(422, {"error": "conflicting or cyclic timeline"})
                 return
+            if parsed.path == "/timeline":
+                result["pagination"] = page.metadata()
+                if page.total > len(events):
+                    existing = result["warnings"]
+                    warnings = [str(w) for w in existing] if isinstance(existing, list) else []
+                    result["warnings"] = [
+                        *warnings,
+                        "partial-page: intervals/causal paths may cross page boundaries",
+                    ]
             self.respond(200, result)
 
         def do_POST(self) -> None:
