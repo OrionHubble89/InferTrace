@@ -2,7 +2,11 @@
 
 执行依据：docs/implementation-plan.md。当前目标版本：0.1.0rc2。
 当前评审修复的验收状态见 [review-followups.md](review-followups.md)。
-九项评审问题已实现并通过本地回归，当前提交的完整 CI 尚待确认。
+九项评审问题已全部修复，80 项测试、Python 3.10/3.12、Chromium、
+独立 wheel 安装、Compose/Jaeger 和依赖审计均已通过。
+rc2 源代码提交：218c4d1ca48a54c58741f94c01866049bffac077。
+[rc2 完整 CI #39113508807](https://github.com/OrionHubble89/InferTrace/actions/runs/39113508807)。
+Zero Overhead 的工程约束已测试；真实推理开销和引擎兼容性仍属未执行的 M9。
 以下 M0–M8 提交表是 rc1 的历史基线，不作为 rc2 最终验收结论。
 本报告将本地验证、GitHub CI 和 M9 实机验证分开记录。
 M0–M8 已完成 release candidate 范围内的实现和验证。

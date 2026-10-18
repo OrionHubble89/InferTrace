@@ -1,6 +1,6 @@
 # InferTrace Implementation Plan
 
-Status: **rc2 review fixes locally verified; full CI pending; M9 deferred**. This document defines the implementation order; completion is based on evidence, not the presence of a file.
+Status: **rc2 review fixes implemented and full CI verified; M9 deferred**. This document defines the implementation order; completion is based on evidence, not the presence of a file.
 
 ## Design principles
 
@@ -91,7 +91,7 @@ Implement M0–M8 with local/unit/mock/integration tests and CI. **Defer real GP
 | M5 | Implemented; Chromium UI and CI verified |
 | M6 | Implemented; CPU/failure/memory tests and CI verified |
 | M7 | Implemented; Compose/Jaeger and full CI verified at 9df9d45 |
-| M8 | Complete: source 6a256b2; all jobs green in CI run 39108236394 |
+| M8 | rc2 accepted: source 218c4d1, 80 tests and all CI jobs green in run 39113508807 |
 | M9 | Deferred until M0–M8 complete |
 
 ## Definition of done

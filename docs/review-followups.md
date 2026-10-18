@@ -1,7 +1,10 @@
 # Review follow-ups — 0.1.0rc2
 
-Status: all nine findings implemented and locally regression-tested; full GitHub
-CI for this revision is pending. M9 real vLLM + RTX 4090 remains excluded.
+Status: all nine findings implemented and regression-tested. Source revision
+`218c4d1ca48a54c58741f94c01866049bffac077` passed every job in
+[GitHub CI #39113508807](https://github.com/OrionHubble89/InferTrace/actions/runs/39113508807):
+Python 3.10, Python 3.12, Chromium UI, Compose/Jaeger and dependency audits.
+M9 real vLLM + RTX 4090 remains excluded.
 The earlier rc1 CI established the paths it tested, not full principle compliance.
 
 ## Findings and implementation evidence
@@ -34,7 +37,9 @@ Legacy database migration preserves original payloads and IDs.
 
 ## Verification
 
-Local: 80 Python tests, Ruff lint/format, strict mypy, Chromium interactions and
-large-history pagination passed. Wheel build passed. Final GitHub verification
-must additionally pass Python 3.10/3.12, installed-wheel smoke, Compose/Jaeger and
-dependency audits before this revision is accepted. No real GPU test is run.
+Verified: 80 Python tests on Python 3.10 and 3.12; Ruff lint/format; strict mypy;
+Chromium lifecycle/interactions and large-history pagination; built and installed
+wheel smoke; Compose lifecycle/event/Jaeger end-to-end checks; Python dependency
+audit and npm audit. A fresh local virtualenv wheel install and pip check also
+passed. The nine review findings are closed at the verified source revision.
+No real GPU test was run, and no measured inference-overhead claim is made.

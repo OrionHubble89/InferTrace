@@ -54,7 +54,7 @@ Wrap application calls with inference_session / inference_turn; inference_tool
 records named tool intervals without inputs/outputs.
 
 ## Engineering status
-Review follow-ups target `0.1.0rc2`; see the
+Current release candidate: `0.1.0rc2`; see the
 [principle-by-principle acceptance matrix](docs/review-followups.md).
 M0–M8 target a locally and CI-validated release candidate, not production
 validation. The authoritative plan and evidence are tracked in:
