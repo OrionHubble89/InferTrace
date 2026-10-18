@@ -1,4 +1,5 @@
 """Usage: python examples/observe_vllm.py"""
+
 import os
 
 from infertrace.stream import observe_completion

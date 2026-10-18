@@ -1,14 +1,15 @@
 """OTel tracing bootstrap with optional OTLP exporter."""
+
 from __future__ import annotations
 
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 
 
 def configure_tracing(
@@ -24,7 +25,11 @@ def configure_tracing(
     provider = TracerProvider(resource=Resource.create({"service.name": service_name}))
     if otlp_endpoint:
         provider.add_span_processor(
-            BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint, insecure=otlp_endpoint.startswith("http://")))
+            BatchSpanProcessor(
+                OTLPSpanExporter(
+                    endpoint=otlp_endpoint, insecure=otlp_endpoint.startswith("http://")
+                )
+            )
         )
     if console:
         provider.add_span_processor(BatchSpanProcessor(ConsoleSpanExporter()))

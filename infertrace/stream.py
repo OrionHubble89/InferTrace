@@ -2,12 +2,13 @@
 
 Observations are client-received chunks, not necessarily model tokens.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import time
-from typing import Iterator
+from collections.abc import Iterator
+from dataclasses import dataclass
 
 import httpx
 from opentelemetry.propagate import inject

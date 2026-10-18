@@ -1,4 +1,5 @@
 """Run: python -m infertrace.demo"""
+
 import time
 
 from opentelemetry import trace
