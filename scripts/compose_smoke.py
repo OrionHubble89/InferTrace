@@ -21,9 +21,7 @@ with httpx.Client(timeout=5) as client:
             assert {"infertrace.user.session", "infertrace.user.turn", "infertrace.request"} <= {
                 s["operationName"] for s in spans
             }
-            print(
-                "Compose: event pipeline, UI/API, mock endpoint and Jaeger passed"
-            )
+            print("Compose: event pipeline, UI/API, mock endpoint and Jaeger passed")
             break
         time.sleep(1)
     else:
